@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import re
 from urllib.parse import urljoin
 
 from bs4 import BeautifulSoup
@@ -53,11 +54,12 @@ def parse_did_you_know_html(html: str) -> DidYouKnowItem:
         raise WikipediaFetchError('Could not find the Hebrew Wikipedia "הידעת" section')
 
     image_url = _find_content_image(section)
+    source_url = _find_source_url(section)
     text = _extract_section_text(section)
     if not text:
         raise WikipediaFetchError('The Hebrew Wikipedia "הידעת" section did not contain text')
 
-    return DidYouKnowItem(text=text, image_url=image_url)
+    return DidYouKnowItem(text=text, image_url=image_url, source_url=source_url)
 
 
 def _find_did_you_know_section(soup: BeautifulSoup):
@@ -91,16 +93,36 @@ def _find_content_image(section) -> str | None:
     return None
 
 
+def _find_source_url(section) -> str:
+    headline = section.find(["h2", "h3"])
+    if headline is not None:
+        link = headline.find("a", href=True)
+        if link is not None:
+            return urljoin("https://he.wikipedia.org", link["href"])
+
+    return MAIN_PAGE_URL
+
+
 def _extract_section_text(section) -> str:
-    for unwanted in section.select("style, script, .mw-editsection, .noprint"):
+    section = BeautifulSoup(str(section), "html.parser")
+
+    for unwanted in section.select("style, script, h2, h3, figure, .mw-editsection, .noprint"):
         unwanted.decompose()
 
-    skipped = {"הידעת", 'לקטעי "הידעת?" נוספים', 'קטע "הידעת?" אקראי'}
-    lines = []
-    for line in section.get_text("\n", strip=True).splitlines():
-        clean = " ".join(line.split())
-        if not clean or clean in skipped:
-            continue
-        lines.append(clean)
+    for div in section.find_all("div"):
+        style = div.get("style", "")
+        if "float:" in style or "clear:" in style:
+            div.decompose()
 
-    return "\n".join(lines)
+    for link in section.find_all("a"):
+        next_sibling = link.next_sibling
+        while next_sibling is not None and not str(next_sibling).strip():
+            next_sibling = next_sibling.next_sibling
+        if getattr(next_sibling, "name", None) == "a":
+            link.insert_after(" ")
+
+    text = section.get_text("", strip=False)
+    text = re.sub(r"\s+", " ", text).strip()
+    text = re.sub(r"\s+([,.;:!?])", r"\1", text)
+
+    return text
