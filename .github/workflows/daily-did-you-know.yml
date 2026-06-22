@@ -1,0 +1,61 @@
+name: Send Daily Did You Know
+
+on:
+  schedule:
+    # GitHub cron is UTC. These two schedules cover 09:00 Israel time in summer and winter.
+    - cron: "0 6 * * *"
+    - cron: "0 7 * * *"
+  workflow_dispatch:
+
+jobs:
+  send:
+    runs-on: ubuntu-latest
+
+    env:
+      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+      TELEGRAM_CHANNEL_ID: ${{ secrets.TELEGRAM_CHANNEL_ID }}
+      DAILY_SEND_TIME: ${{ vars.DAILY_SEND_TIME || '09:00' }}
+      TIMEZONE: ${{ vars.TIMEZONE || 'Asia/Jerusalem' }}
+      USER_AGENT: ${{ vars.USER_AGENT || 'hebrew-wikipedia-dyk-bot/0.1 (GitHub Actions)' }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Decide whether this run should send
+        id: due
+        shell: python
+        run: |
+          from datetime import datetime
+          import os
+          from zoneinfo import ZoneInfo
+
+          if os.environ["GITHUB_EVENT_NAME"] == "workflow_dispatch":
+              should_send = True
+          else:
+              hour, minute = map(int, os.environ["DAILY_SEND_TIME"].split(":", 1))
+              now = datetime.now(ZoneInfo(os.environ["TIMEZONE"]))
+              target = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
+              seconds_after_target = (now - target).total_seconds()
+              should_send = 0 <= seconds_after_target < 3600
+
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
+              output.write(f"should_send={str(should_send).lower()}\n")
+
+      - name: Install dependencies
+        if: steps.due.outputs.should_send == 'true'
+        run: python -m pip install -r requirements.txt
+
+      - name: Run tests
+        if: steps.due.outputs.should_send == 'true'
+        run: python -m pytest
+
+      - name: Send daily item
+        if: steps.due.outputs.should_send == 'true'
+        run: python -m wiki_didyouknow_bot --send-once
