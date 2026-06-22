@@ -1,6 +1,6 @@
 import asyncio
 
-from wiki_didyouknow_bot.telegram_bot import CAPTION_LIMIT, TEXT_MESSAGE_LIMIT, build_message, send_item
+from wiki_didyouknow_bot.telegram_bot import TEXT_MESSAGE_LIMIT, build_message, send_item
 from wiki_didyouknow_bot.wikipedia import DidYouKnowItem
 
 
@@ -15,7 +15,7 @@ class FakeBot:
         self.calls.append(("message", kwargs))
 
 
-def test_send_item_sends_short_image_item_as_photo_caption():
+def test_send_item_always_sends_image_separately_from_text():
     bot = FakeBot()
     item = DidYouKnowItem(text="טקסט קצר", image_url="https://example.com/image.jpg")
 
@@ -27,16 +27,22 @@ def test_send_item_sends_short_image_item_as_photo_caption():
             {
                 "chat_id": "@channel",
                 "photo": "https://example.com/image.jpg",
-                "caption": build_message(item),
             },
-        )
+        ),
+        (
+            "message",
+            {
+                "chat_id": "@channel",
+                "text": build_message(item),
+                "disable_web_page_preview": False,
+            },
+        ),
     ]
-    assert len(bot.calls[0][1]["caption"]) <= CAPTION_LIMIT
 
 
 def test_send_item_sends_long_image_item_as_photo_then_text():
     bot = FakeBot()
-    item = DidYouKnowItem(text="א" * CAPTION_LIMIT, image_url="https://example.com/image.jpg")
+    item = DidYouKnowItem(text="א" * 1024, image_url="https://example.com/image.jpg")
 
     asyncio.run(send_item(bot, "@channel", item))
 

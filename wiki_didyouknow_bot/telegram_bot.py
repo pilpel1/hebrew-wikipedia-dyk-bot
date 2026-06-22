@@ -10,7 +10,6 @@ from .config import Settings
 from .wikipedia import DidYouKnowItem, fetch_daily_did_you_know
 
 
-CAPTION_LIMIT = 1024
 TEXT_MESSAGE_LIMIT = 4096
 LOGGER = logging.getLogger(__name__)
 
@@ -55,10 +54,6 @@ async def send_did_you_know(context: ContextTypes.DEFAULT_TYPE) -> None:
 
 async def send_item(bot: Bot, chat_id: str | int, item: DidYouKnowItem) -> None:
     message = build_message(item)
-    if item.image_url and len(message) <= CAPTION_LIMIT:
-        await bot.send_photo(chat_id=chat_id, photo=item.image_url, caption=message)
-        return
-
     if item.image_url:
         await bot.send_photo(chat_id=chat_id, photo=item.image_url)
 
