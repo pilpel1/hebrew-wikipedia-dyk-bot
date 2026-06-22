@@ -27,3 +27,6 @@ def test_parse_did_you_know_html_extracts_text_and_image():
     assert "עוד משפט קצר" in item.text
     assert "כיתוב תמונה" not in item.text
     assert "לקטעי" not in item.text
+    assert '<a href="https://he.wikipedia.org/wiki/ארץ_האש">ארץ האש</a>' in item.html_text
+    assert 'ה<a href="https://he.wikipedia.org/wiki/קונקיסטדור">קונקיסטדור</a>' in item.html_text
+    assert '<a href="https://he.wikipedia.org/wiki/רכס_הרים">רכס</a> <a href="https://he.wikipedia.org/wiki/גבעה">גבעות</a>' in item.html_text

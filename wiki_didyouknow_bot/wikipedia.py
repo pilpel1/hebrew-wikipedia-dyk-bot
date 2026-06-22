@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from html import escape
 import re
 from urllib.parse import urljoin
 
-from bs4 import BeautifulSoup
+from bs4 import BeautifulSoup, NavigableString, Tag
 import requests
 
 
@@ -17,6 +18,7 @@ class DidYouKnowItem:
     text: str
     image_url: str | None
     source_url: str = MAIN_PAGE_URL
+    html_text: str | None = None
 
 
 class WikipediaFetchError(RuntimeError):
@@ -55,11 +57,11 @@ def parse_did_you_know_html(html: str) -> DidYouKnowItem:
 
     image_url = _find_content_image(section)
     source_url = _find_source_url(section)
-    text = _extract_section_text(section)
+    text, html_text = _extract_section_content(section)
     if not text:
         raise WikipediaFetchError('The Hebrew Wikipedia "הידעת" section did not contain text')
 
-    return DidYouKnowItem(text=text, image_url=image_url, source_url=source_url)
+    return DidYouKnowItem(text=text, image_url=image_url, source_url=source_url, html_text=html_text)
 
 
 def _find_did_you_know_section(soup: BeautifulSoup):
@@ -103,7 +105,7 @@ def _find_source_url(section) -> str:
     return MAIN_PAGE_URL
 
 
-def _extract_section_text(section) -> str:
+def _extract_section_content(section) -> tuple[str, str]:
     section = BeautifulSoup(str(section), "html.parser")
 
     for unwanted in section.select("style, script, h2, h3, figure, .mw-editsection, .noprint"):
@@ -122,7 +124,38 @@ def _extract_section_text(section) -> str:
             link.insert_after(" ")
 
     text = section.get_text("", strip=False)
-    text = re.sub(r"\s+", " ", text).strip()
-    text = re.sub(r"\s+([,.;:!?])", r"\1", text)
+    text = _normalize_text(text)
 
-    return text
+    html_text = _render_telegram_html(section)
+    html_text = _normalize_text(html_text)
+    html_text = re.sub(r"\s+</a>", "</a>", html_text)
+    html_text = re.sub(r"<a ([^>]+)>\s+", r"<a \1>", html_text)
+
+    return text, html_text
+
+
+def _render_telegram_html(node) -> str:
+    parts = []
+    for child in node.children:
+        if isinstance(child, NavigableString):
+            parts.append(escape(str(child), quote=False))
+            continue
+
+        if not isinstance(child, Tag):
+            continue
+
+        if child.name == "a" and child.get("href"):
+            href = urljoin("https://he.wikipedia.org", child["href"])
+            label = _normalize_text(child.get_text("", strip=False))
+            if label:
+                parts.append(f'<a href="{escape(href, quote=True)}">{escape(label, quote=False)}</a>')
+            continue
+
+        parts.append(_render_telegram_html(child))
+
+    return "".join(parts)
+
+
+def _normalize_text(text: str) -> str:
+    text = re.sub(r"\s+", " ", text).strip()
+    return re.sub(r"\s+([,.;:!?])", r"\1", text)
