@@ -2,9 +2,10 @@ name: Send Daily Did You Know
 
 on:
   schedule:
-    # GitHub cron is UTC. These two schedules cover 10:00 Israel time in summer and winter.
-    - cron: "0 7 * * *"
-    - cron: "0 8 * * *"
+    # GitHub cron is UTC. These two schedules cover 09:17 Israel time in summer and winter.
+    # Avoiding minute 00 reduces GitHub Actions schedule delays.
+    - cron: "17 6 * * *"
+    - cron: "17 7 * * *"
   workflow_dispatch:
 
 jobs:
@@ -14,7 +15,7 @@ jobs:
     env:
       TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
       TELEGRAM_CHANNEL_ID: ${{ secrets.TELEGRAM_CHANNEL_ID }}
-      DAILY_SEND_TIME: ${{ vars.DAILY_SEND_TIME || '10:00' }}
+      DAILY_SEND_TIME: ${{ vars.DAILY_SEND_TIME || '09:17' }}
       TIMEZONE: ${{ vars.TIMEZONE || 'Asia/Jerusalem' }}
       USER_AGENT: ${{ vars.USER_AGENT || 'hebrew-wikipedia-dyk-bot/0.1 (GitHub Actions)' }}
       GITHUB_EVENT_SCHEDULE: ${{ github.event.schedule }}
