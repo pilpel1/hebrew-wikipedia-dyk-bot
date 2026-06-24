@@ -109,7 +109,7 @@ python -m wiki_didyouknow_bot --send-once
 - Variable אופציונלי בשם `TIMEZONE`, למשל `Asia/Jerusalem`
 - Variable אופציונלי בשם `USER_AGENT`
 
-ה-cron של GitHub Actions עובד לפי UTC. כדי להתמודד עם שעון קיץ/חורף בישראל, ה-workflow רץ ב-`06:00 UTC` וגם ב-`07:00 UTC`, אבל שולח רק אם השעה המקומית תואמת ל-`DAILY_SEND_TIME`.
+ה-cron של GitHub Actions עובד לפי UTC. כדי להתמודד עם שעון קיץ/חורף בישראל, ה-workflow רץ ב-`06:00 UTC` וגם ב-`07:00 UTC`, אבל שולח רק אם שעת ה-cron המתוזמנת תואמת ל-`DAILY_SEND_TIME` בישראל. זה חשוב כי GitHub עלול להתחיל scheduled workflows באיחור.
 
 אם רוצים שעה אחרת, בדרך כלל מספיק לשנות את ה-variable `DAILY_SEND_TIME`. אם זו שעה שלא מתאימה ל-`06:00` או `07:00 UTC`, צריך לעדכן גם את שורות ה-cron:
 
