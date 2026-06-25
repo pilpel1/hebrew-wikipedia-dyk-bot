@@ -112,30 +112,59 @@ python -m wiki_didyouknow_bot --send-once
 ### תזמון יומי מדויק עם cron-job.org
 
 1. צור Fine-grained Personal Access Token ב-GitHub:
-   - `Settings` (של החשבון) → `Developer settings` → `Personal access tokens` → `Fine-grained tokens`
-   - `Repository access`: רק `hebrew-wikipedia-dyk-bot`
-   - `Permissions` → `Actions`: `Read and write`
-   - שמור את הטוקן, הוא מוצג רק פעם אחת.
+   - `Settings` (של החשבון) → `Developer settings` → `Personal access tokens` → `Fine-grained tokens` → `Generate new token`
+   - `Repository access` → `Only select repositories` → רק `hebrew-wikipedia-dyk-bot`
+   - `Permissions` → `Repository permissions` → `Actions`: `Read and write`
+   - `Expiration`: כדי לא לחדש כל חודש, בחר `No expiration` או תאריך רחוק.
+   - לחץ `Generate token` ושמור אותו מיד, הוא מוצג רק פעם אחת.
 
-2. ב-[cron-job.org](https://cron-job.org) צור job חדש:
+2. ב-[cron-job.org](https://cron-job.org) צור job חדש (`CREATE CRONJOB`):
+   - Title: לבחירתך, למשל `DYK daily send`.
    - URL:
      ```text
      https://api.github.com/repos/pilpel1/hebrew-wikipedia-dyk-bot/actions/workflows/daily-did-you-know.yml/dispatches
      ```
-   - Method: `POST`
-   - Headers:
-     ```text
-     Accept: application/vnd.github+json
-     Authorization: Bearer <הטוקן שלך>
-     X-GitHub-Api-Version: 2022-11-28
-     ```
-   - Request body:
-     ```json
-     {"ref":"main"}
-     ```
-   - Schedule: `09:00`, timezone `Asia/Jerusalem` (cron-job.org מטפל בעצמו בשעון קיץ/חורף).
+   - Schedule: כל יום ב-`09:00`, timezone `Asia/Jerusalem` (cron-job.org מטפל בעצמו בשעון קיץ/חורף).
+   - בלשונית `ADVANCED`:
+     - Request method: `POST`
+     - Headers (key + value בכל שורה):
+       ```text
+       Accept: application/vnd.github+json
+       Authorization: Bearer <הטוקן שלך>
+       X-GitHub-Api-Version: 2022-11-28
+       Content-Type: application/json
+       ```
+     - Request body:
+       ```json
+       {"ref":"main"}
+       ```
+   - שמור (`CREATE`).
 
-תגובה תקינה מ-GitHub היא `204 No Content`. אם מקבלים `401`/`403`, בדוק את הטוקן וההרשאות. אם מקבלים `404`, בדוק את שם ה-repo ושם קובץ ה-workflow.
+חשוב: ב-`Authorization` הערך הוא המילה `Bearer`, רווח, ואז הטוקן (בלי נקודתיים).
+
+### בדיקה ידנית
+
+בדף עריכת ה-job ב-cron-job.org יש כפתור `TEST RUN` ששולח את ה-POST מיד. הצלחה נראית כך:
+
+- ב-cron-job.org: status `204`.
+- ב-GitHub `Actions`: מופיע run חדש של `Send Daily Did You Know` עם `workflow_dispatch`.
+- בטלגרם: ההודעה מגיעה אחרי ~20-40 שניות (התקנה + tests).
+
+אם משהו נכשל:
+
+- `401` / `403`: בעיה בטוקן או בהרשאות (`Actions: Read and write`, גישה לריפו).
+- `404`: עדיין לא עשית `git push` של ה-workflow ל-`main`, או שם repo/workflow שגוי.
+
+### גיבוי הטוקן
+
+הטוקן לא חלק מהקוד; הקוד אף פעם לא קורא אותו. הוא חי בתוך ה-header של cron-job.org. אם בכל זאת רוצים עותק גיבוי, עדיף מנהל סיסמאות. אפשר גם לשמור ב-`.env` המקומי (שחסום ב-git) עם הערה ברורה, למשל:
+
+```env
+# Not used by the app. Backup only: GitHub PAT for cron-job.org workflow_dispatch.
+CRONJOB_GITHUB_PAT=github_pat_...
+```
+
+אם הטוקן אובד וגם אין גיבוי, פשוט מייצרים חדש ב-GitHub ומעדכנים את ה-header ב-cron-job.org.
 
 אפשר גם להריץ ידנית דרך הטאב `Actions` בזכות `workflow_dispatch`.
 
