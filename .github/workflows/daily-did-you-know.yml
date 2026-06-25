@@ -2,10 +2,9 @@ name: Send Daily Did You Know
 
 on:
   schedule:
-    # GitHub cron is UTC. These two schedules cover 09:17 Israel time in summer and winter.
-    # Avoiding minute 00 reduces GitHub Actions schedule delays.
-    - cron: "17 6 * * *"
-    - cron: "17 7 * * *"
+    # GitHub scheduled workflows can be delayed or dropped.
+    # Try several times through the UTC morning; the first run after 09:17 Israel time sends.
+    - cron: "2,17,32,47 6-11 * * *"
   workflow_dispatch:
 
 jobs:
@@ -18,7 +17,6 @@ jobs:
       DAILY_SEND_TIME: ${{ vars.DAILY_SEND_TIME || '09:17' }}
       TIMEZONE: ${{ vars.TIMEZONE || 'Asia/Jerusalem' }}
       USER_AGENT: ${{ vars.USER_AGENT || 'hebrew-wikipedia-dyk-bot/0.1 (GitHub Actions)' }}
-      GITHUB_EVENT_SCHEDULE: ${{ github.event.schedule }}
 
     steps:
       - name: Check out repository
@@ -34,43 +32,54 @@ jobs:
         id: due
         shell: python
         run: |
-          from datetime import datetime, timedelta, timezone
+          from datetime import datetime, timedelta
           import os
           from zoneinfo import ZoneInfo
 
+          timezone_name = os.environ["TIMEZONE"]
+          now = datetime.now(ZoneInfo(timezone_name))
+          local_date = now.date().isoformat()
+
           if os.environ["GITHUB_EVENT_NAME"] == "workflow_dispatch":
-              should_send = True
+              allow_send = True
               reason = "manual run"
           else:
               target_hour, target_minute = map(int, os.environ["DAILY_SEND_TIME"].split(":", 1))
-              cron_minute, cron_hour, *_ = os.environ["GITHUB_EVENT_SCHEDULE"].split()
-              scheduled_utc = datetime.now(timezone.utc).replace(
-                  hour=int(cron_hour),
-                  minute=int(cron_minute),
-                  second=0,
-                  microsecond=0,
-              )
-              if scheduled_utc > datetime.now(timezone.utc):
-                  scheduled_utc -= timedelta(days=1)
-
-              scheduled_local = scheduled_utc.astimezone(ZoneInfo(os.environ["TIMEZONE"]))
-              should_send = scheduled_local.hour == target_hour and scheduled_local.minute == target_minute
-              reason = f"scheduled local time was {scheduled_local:%Y-%m-%d %H:%M %Z}"
+              target = now.replace(hour=target_hour, minute=target_minute, second=0, microsecond=0)
+              latest_send_time = target + timedelta(hours=6)
+              allow_send = target <= now < latest_send_time
+              reason = f"local time is {now:%Y-%m-%d %H:%M %Z}; target window is {target:%H:%M}-{latest_send_time:%H:%M}"
 
           with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
-              output.write(f"should_send={str(should_send).lower()}\n")
+              output.write(f"allow_send={str(allow_send).lower()}\n")
+              output.write(f"local_date={local_date}\n")
               output.write(f"reason={reason}\n")
 
-          print(f"should_send={should_send} ({reason})")
+          print(f"allow_send={allow_send} ({reason})")
+
+      - name: Restore daily send marker
+        id: daily-send-cache
+        if: github.event_name == 'schedule' && steps.due.outputs.allow_send == 'true'
+        uses: actions/cache@v4
+        with:
+          path: .send-cache
+          key: dyk-sent-${{ steps.due.outputs.local_date }}
 
       - name: Install dependencies
-        if: steps.due.outputs.should_send == 'true'
+        if: steps.due.outputs.allow_send == 'true' && (github.event_name == 'workflow_dispatch' || steps.daily-send-cache.outputs.cache-hit != 'true')
         run: python -m pip install -r requirements.txt
 
       - name: Run tests
-        if: steps.due.outputs.should_send == 'true'
+        if: steps.due.outputs.allow_send == 'true' && (github.event_name == 'workflow_dispatch' || steps.daily-send-cache.outputs.cache-hit != 'true')
         run: python -m pytest
 
       - name: Send daily item
-        if: steps.due.outputs.should_send == 'true'
+        if: steps.due.outputs.allow_send == 'true' && (github.event_name == 'workflow_dispatch' || steps.daily-send-cache.outputs.cache-hit != 'true')
         run: python -m wiki_didyouknow_bot --send-once
+
+      - name: Mark scheduled send done
+        if: github.event_name == 'schedule' && steps.due.outputs.allow_send == 'true' && steps.daily-send-cache.outputs.cache-hit != 'true'
+        shell: bash
+        run: |
+          mkdir -p .send-cache
+          date -u +"sent_at=%Y-%m-%dT%H:%M:%SZ" > .send-cache/sent.txt
