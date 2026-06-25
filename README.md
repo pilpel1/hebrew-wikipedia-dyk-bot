@@ -94,28 +94,48 @@ python -m wiki_didyouknow_bot --send-once
 
 ## הרצה דרך GitHub Actions
 
-הקובץ `.github/workflows/daily-did-you-know.yml` מריץ את הבוט פעם ביום:
+הקובץ `.github/workflows/daily-did-you-know.yml` מריץ את הבוט:
 
 1. מתקין Python.
 2. מתקין dependencies.
 3. מריץ tests.
 4. מפעיל `python -m wiki_didyouknow_bot --send-once`.
 
+ה-workflow מופעל על ידי `workflow_dispatch` בלבד, לא על ידי `schedule`. הסיבה: scheduled workflows של GitHub לא אמינים ויכולים להתעכב שעות או להידלג. לכן את התזמון המדויק עושה מתזמן חיצוני שקורא ל-GitHub API.
+
 צריך להגדיר ב-GitHub repository:
 
 - Secret בשם `TELEGRAM_BOT_TOKEN`
 - Secret בשם `TELEGRAM_CHANNEL_ID`
-- Variable אופציונלי בשם `DAILY_SEND_TIME`, למשל `09:17`
-- Variable אופציונלי בשם `TIMEZONE`, למשל `Asia/Jerusalem`
 - Variable אופציונלי בשם `USER_AGENT`
 
-ה-cron של GitHub Actions עובד לפי UTC, ו-scheduled workflows יכולים להתעכב או להידלג. לכן ה-workflow מנסה לרוץ כמה פעמים בבוקר, וההרצה הראשונה שמתחילה אחרי `DAILY_SEND_TIME` שולחת. אחרי שליחה מוצלחת נשמר marker יומי כדי שהרצות נוספות באותו יום ידלגו.
+### תזמון יומי מדויק עם cron-job.org
 
-אם רוצים שעה אחרת, בדרך כלל מספיק לשנות את ה-variable `DAILY_SEND_TIME`. אם זו שעה שמחוץ לחלון הבוקר שמוגדר ב-cron, צריך לעדכן גם את שורת ה-cron:
+1. צור Fine-grained Personal Access Token ב-GitHub:
+   - `Settings` (של החשבון) → `Developer settings` → `Personal access tokens` → `Fine-grained tokens`
+   - `Repository access`: רק `hebrew-wikipedia-dyk-bot`
+   - `Permissions` → `Actions`: `Read and write`
+   - שמור את הטוקן, הוא מוצג רק פעם אחת.
 
-```yaml
-- cron: "2,17,32,47 6-11 * * *"
-```
+2. ב-[cron-job.org](https://cron-job.org) צור job חדש:
+   - URL:
+     ```text
+     https://api.github.com/repos/pilpel1/hebrew-wikipedia-dyk-bot/actions/workflows/daily-did-you-know.yml/dispatches
+     ```
+   - Method: `POST`
+   - Headers:
+     ```text
+     Accept: application/vnd.github+json
+     Authorization: Bearer <הטוקן שלך>
+     X-GitHub-Api-Version: 2022-11-28
+     ```
+   - Request body:
+     ```json
+     {"ref":"main"}
+     ```
+   - Schedule: `09:00`, timezone `Asia/Jerusalem` (cron-job.org מטפל בעצמו בשעון קיץ/חורף).
+
+תגובה תקינה מ-GitHub היא `204 No Content`. אם מקבלים `401`/`403`, בדוק את הטוקן וההרשאות. אם מקבלים `404`, בדוק את שם ה-repo ושם קובץ ה-workflow.
 
 אפשר גם להריץ ידנית דרך הטאב `Actions` בזכות `workflow_dispatch`.
 
